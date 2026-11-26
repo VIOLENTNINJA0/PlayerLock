@@ -1,5 +1,16 @@
 # PlayerLock
 
+## What is the MyNBA Player Lock Method?
+
+Instead of grinding VC or dealing with MyCAREER restrictions, many players run a custom career inside **MyNBA** using **Player Lock**:
+
+1. Create a custom prospect (or pick an existing player) and place them on a team in MyNBA.
+2. Turn on **Player Lock** in your controller/position settings so you only control that single player during games.
+3. Play out your career with full control over sliders, rosters, minutes, and eras—without microtransactions or attribute caps.
+
+Because MyNBA doesn't have an XP or badge progression system for a single locked player, **PlayerLock** acts as your off-screen career companion—calculating XP from your box scores, awarding Attribute Points (AP) and Badge Points (BP), and tracking your seasons and playoff runs.
+
+
 An offline Android app built with Kotlin and Jetpack Compose for tracking custom player-lock basketball careers, box scores, and season progression.
 ## Screenshots
 
