@@ -13,7 +13,6 @@ Because MyNBA doesn't have an XP or badge progression system for a single locked
 
 
 
-## Screenshots
 
 ## Screenshots
 
