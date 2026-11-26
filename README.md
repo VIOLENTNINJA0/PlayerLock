@@ -7,7 +7,7 @@ An offline Android app built with Kotlin and Jetpack Compose for tracking custom
 
 | Dashboard | Player Creator | Upgrade Shop | Playoff Bracket |
 | :---: | :---: | :---: | :---: |
-| <img src="dashboard.jpeg" width="200"> | <img src="creator.jpeg" width="200"> | <img src="shop.jpeg" width="200"> | <img src="playoffs.jpeg" width="200"> |
+| <img src="dashboard.jpeg" width="200"> | <img src="player-creator.jpeg" width="200"> | <img src="shop.jpeg" width="200"> | <img src="playoffs.jpeg" width="200"> |
 
 
 ## Features
