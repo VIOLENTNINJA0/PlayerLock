@@ -1,4 +1,5 @@
 # PlayerLock
+An offline Android app built with Kotlin and Jetpack Compose for tracking custom player-lock basketball careers, box scores, and season progression
 
 ## What is the MyNBA Player Lock Method?
 
@@ -11,7 +12,7 @@ Instead of grinding VC or dealing with MyCAREER restrictions, many players run a
 Because MyNBA doesn't have an XP or badge progression system for a single locked player, **PlayerLock** acts as your off-screen career companion—calculating XP from your box scores, awarding Attribute Points (AP) and Badge Points (BP), and tracking your seasons and playoff runs.
 
 
-An offline Android app built with Kotlin and Jetpack Compose for tracking custom player-lock basketball careers, box scores, and season progression.
+
 ## Screenshots
 
 ## Screenshots
