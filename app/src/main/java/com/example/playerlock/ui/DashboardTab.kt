@@ -1,6 +1,8 @@
 package com.example.playerlock.ui
 
+import android.content.Intent
 import android.graphics.BitmapFactory
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.*
@@ -21,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -60,6 +64,9 @@ fun DashboardTab(
     modifier: Modifier = Modifier
 ) {
     var showSettings by remember { mutableStateOf(false) }
+    val availableUpdate by viewModel?.availableUpdate?.collectAsState() ?: remember { mutableStateOf(null) }
+    val context = LocalContext.current
+    val primaryColor = MaterialTheme.colorScheme.primary
 
     Column(
         modifier = modifier
@@ -104,15 +111,81 @@ fun DashboardTab(
                         )
                     }
                 }
-                IconButton(
-                    onClick = { showSettings = true }
-                ) {
+
+                IconButton(onClick = { showSettings = true }) {
                     Icon(
                         imageVector = Icons.Rounded.Settings,
                         contentDescription = "Settings",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
+                        tint = MaterialTheme.colorScheme.onSurface
                     )
+                }
+            }
+        }
+
+        // Dismissible GitHub Update Banner
+        availableUpdate?.let { updateInfo ->
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = primaryColor.copy(alpha = 0.15f),
+                border = BorderStroke(1.dp, primaryColor),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("🚀", fontSize = 16.sp)
+                        Column {
+                            Text(
+                                text = "Update Available (${updateInfo.tagName})",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "New features & improvements ready for PlayerLock",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(updateInfo.htmlUrl))
+                                context.startActivity(intent)
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
+                        ) {
+                            Text("Download", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        IconButton(
+                            onClick = { viewModel?.dismissUpdateBanner() },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Dismiss",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
                 }
             }
         }

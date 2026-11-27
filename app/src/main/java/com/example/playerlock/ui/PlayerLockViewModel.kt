@@ -4,8 +4,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.playerlock.BuildConfig
 import com.example.playerlock.data.AppSettings
 import com.example.playerlock.data.CustomPlayerTemplate
+import com.example.playerlock.data.GitHubReleaseInfo
+import com.example.playerlock.data.GitHubUpdateChecker
 import com.example.playerlock.data.GameLog
 import com.example.playerlock.data.NbaTeamCatalog
 import com.example.playerlock.data.PlayoffBracketState
@@ -123,6 +126,12 @@ class PlayerLockViewModel(
     private val _xpPreview = MutableStateFlow<ProgressionCalculator.GameXpResult?>(null)
     val xpPreview: StateFlow<ProgressionCalculator.GameXpResult?> = _xpPreview.asStateFlow()
 
+    private val _availableUpdate = MutableStateFlow<GitHubReleaseInfo?>(null)
+    val availableUpdate: StateFlow<GitHubReleaseInfo?> = _availableUpdate.asStateFlow()
+
+    private val _updateCheckStatus = MutableStateFlow<String?>(null)
+    val updateCheckStatus: StateFlow<String?> = _updateCheckStatus.asStateFlow()
+
     init {
         // Whenever the active profile changes, run catalog sync so that existing DB rows
         // get their category and sortOrder updated to match AttributeSeedData (1..36)
@@ -135,6 +144,40 @@ class PlayerLockViewModel(
                 }
             }
         }
+        checkForUpdatesSilently()
+    }
+
+    fun checkForUpdatesSilently() {
+        viewModelScope.launch {
+            val result = GitHubUpdateChecker.checkLatestRelease(BuildConfig.VERSION_NAME)
+            result.onSuccess { releaseInfo ->
+                _availableUpdate.value = releaseInfo
+            }
+        }
+    }
+
+    fun checkForUpdatesManually(onResult: (Boolean, GitHubReleaseInfo?, String) -> Unit) {
+        viewModelScope.launch {
+            _updateCheckStatus.value = "Checking GitHub..."
+            val result = GitHubUpdateChecker.checkLatestRelease(BuildConfig.VERSION_NAME)
+            result.onSuccess { releaseInfo ->
+                _availableUpdate.value = releaseInfo
+                if (releaseInfo != null) {
+                    _updateCheckStatus.value = "Update available: ${releaseInfo.version}"
+                    onResult(true, releaseInfo, "New version ${releaseInfo.tagName} is available!")
+                } else {
+                    _updateCheckStatus.value = "You are on the latest version."
+                    onResult(false, null, "You're on the latest version (v${BuildConfig.VERSION_NAME}).")
+                }
+            }.onFailure { e ->
+                _updateCheckStatus.value = "Offline — couldn't reach GitHub."
+                onResult(false, null, "Offline — couldn't reach GitHub.")
+            }
+        }
+    }
+
+    fun dismissUpdateBanner() {
+        _availableUpdate.value = null
     }
 
     fun selectProfile(profileId: Int) {

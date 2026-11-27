@@ -1,12 +1,11 @@
 package com.example.playerlock.ui
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import java.text.SimpleDateFormat
-import java.util.Date
 import androidx.documentfile.provider.DocumentFile
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -18,8 +17,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.rounded.Backup
+import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.Gavel
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.NewReleases
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.SportsBasketball
+import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.rounded.SystemUpdate
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,16 +41,34 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.playerlock.BuildConfig
 import com.example.playerlock.data.AppSettings
+import com.example.playerlock.data.GitHubReleaseInfo
 import com.example.playerlock.ui.theme.*
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 private val CardShape = RoundedCornerShape(16.dp)
+
+private const val BUILT_IN_CHANGELOG = """PlayerLock v0.1.0 (Initial Release)
+• Real-time 2K Box Score Row OCR Scanner with CameraX and ML Kit.
+• Position-weighted 2K OVR calculation & 36 MyNBA attributes.
+• All 53 NBA 2K27 Badges across 6 categories.
+• Season & Career Averages tracking (MPG, PPG, RPG, APG, SPG, BPG, FG%, FT%).
+• 82-Game Season Conclusion & Playoff Bracket Mode.
+• Reusable JSON Career Backups & Custom Build Templates.
+• Pure Black AMOLED mode & Theme Studio."""
+
+private const val DISCLAIMER_TEXT = """PlayerLock is an unofficial, 100% offline fan-made career stat tracker designed for NBA 2K players.
+
+PlayerLock is NOT affiliated with, endorsed by, or associated with Take-Two Interactive, 2K Games, Visual Concepts, or the National Basketball Association (NBA). All trademarks belong to their respective owners."""
 
 @Composable
 fun SettingsDialog(
@@ -48,6 +78,8 @@ fun SettingsDialog(
     viewModel: PlayerLockViewModel,
     onDismiss: () -> Unit
 ) {
+    var currentSubScreen by remember { mutableStateOf<String?>(null) } // null, "THEME", "GAMEPLAY", "BACKUP", "ABOUT"
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -60,70 +92,581 @@ fun SettingsDialog(
             color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Header Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "SETTINGS",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        letterSpacing = 1.sp
+            when (currentSubScreen) {
+                "ABOUT" -> {
+                    AboutSubScreen(
+                        viewModel = viewModel,
+                        onBack = { currentSubScreen = null },
+                        onDismiss = onDismiss
                     )
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close Settings",
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
                 }
-
-                SettingsCard(
-                    settings = settings,
-                    playerName = playerName,
-                    activeTeamName = activeTeamName,
-                    viewModel = viewModel,
-                    onQuarterLengthChanged = { viewModel.updateQuarterLength(it) },
-                    onNormalizeChanged = { viewModel.updateNormalizeQuarterXp(it) },
-                    onExportToJson = { viewModel.exportActiveCareerToJson() },
-                    onImportJson = { json, onSuccess, onError ->
-                        viewModel.importCareerFromJson(json, onSuccess, onError)
-                    }
-                )
+                "GAMEPLAY" -> {
+                    GameplaySettingsDialog(
+                        settings = settings,
+                        viewModel = viewModel,
+                        onDismiss = { currentSubScreen = null }
+                    )
+                }
+                "BACKUP" -> {
+                    DataBackupDialog(
+                        settings = settings,
+                        playerName = playerName,
+                        viewModel = viewModel,
+                        onDismiss = { currentSubScreen = null }
+                    )
+                }
+                "THEME" -> {
+                    ThemeStudioDialog(
+                        settings = settings,
+                        activeTeamName = activeTeamName,
+                        viewModel = viewModel,
+                        onDismiss = { currentSubScreen = null }
+                    )
+                }
+                else -> {
+                    MainSettingsScreen(
+                        settings = settings,
+                        playerName = playerName,
+                        activeTeamName = activeTeamName,
+                        viewModel = viewModel,
+                        onOpenThemeStudio = { currentSubScreen = "THEME" },
+                        onOpenGameplay = { currentSubScreen = "GAMEPLAY" },
+                        onOpenBackup = { currentSubScreen = "BACKUP" },
+                        onOpenAbout = { currentSubScreen = "ABOUT" },
+                        onDismiss = onDismiss
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun SettingsCard(
+private fun MainSettingsScreen(
     settings: AppSettings,
     playerName: String,
     activeTeamName: String,
     viewModel: PlayerLockViewModel,
-    onQuarterLengthChanged: (Int) -> Unit,
-    onNormalizeChanged: (Boolean) -> Unit,
-    onExportToJson: suspend () -> String?,
-    onImportJson: (String, () -> Unit, (String) -> Unit) -> Unit
+    onOpenThemeStudio: () -> Unit,
+    onOpenGameplay: () -> Unit,
+    onOpenBackup: () -> Unit,
+    onOpenAbout: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val availableUpdate by viewModel.availableUpdate.collectAsState()
+
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                context.contentResolver.takePersistableUriPermission(uri, flags)
+                viewModel.updateAutoSaveFolderUri(uri.toString())
+                viewModel.updateAutoSaveEnabled(true)
+                viewModel.triggerAutoSave()
+                Toast.makeText(context, "Auto-save folder set!", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "Folder error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    val activePreset = remember(settings.selectedThemeId, activeTeamName, settings.personalizePrimaryColor, settings.personalizeSecondaryColor) {
+        AppThemeCatalog.getPresetById(
+            id = settings.selectedThemeId,
+            activeTeamName = activeTeamName,
+            customPrimary = Color(settings.personalizePrimaryColor),
+            customSecondary = Color(settings.personalizeSecondaryColor)
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Header Row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "SETTINGS",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                letterSpacing = 1.sp
+            )
+            IconButton(onClick = onDismiss) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close Settings",
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+
+        // 1. Top Quick-Toggles Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = CardShape,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "QUICK TOGGLES",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    letterSpacing = 1.sp
+                )
+
+                // Auto-Save Backups Switch
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Backup,
+                            contentDescription = null,
+                            tint = primaryColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "Auto-Save Backups",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Save progress to player folder",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Switch(
+                        checked = settings.autoSaveEnabled,
+                        onCheckedChange = { enabled ->
+                            if (enabled && settings.autoSaveFolderUri.isNullOrBlank()) {
+                                folderPickerLauncher.launch(null)
+                            } else {
+                                viewModel.updateAutoSaveEnabled(enabled)
+                                if (enabled) viewModel.triggerAutoSave()
+                            }
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                            checkedTrackColor = primaryColor
+                        )
+                    )
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), thickness = 0.5.dp)
+
+                // Pure Black AMOLED Switch
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.DarkMode,
+                            contentDescription = null,
+                            tint = primaryColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "Pure Black AMOLED",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "True #000000 background for OLEDs",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Switch(
+                        checked = settings.pureBlackAmoled,
+                        onCheckedChange = { viewModel.updatePureBlackAmoled(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                            checkedTrackColor = primaryColor
+                        )
+                    )
+                }
+            }
+        }
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), thickness = 0.5.dp)
+
+        // 2. Main Settings Rows Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = CardShape,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(0.dp)
+            ) {
+                // Appearance & Theme Studio
+                SettingsMenuRow(
+                    icon = Icons.Rounded.Palette,
+                    title = "Appearance & Theme Studio",
+                    subtitle = activePreset.name,
+                    trailingContent = {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy((-6).dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clip(CircleShape)
+                                    .background(activePreset.primaryDark)
+                                    .border(1.dp, Color.White, CircleShape)
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clip(CircleShape)
+                                    .background(activePreset.secondaryDark)
+                                    .border(1.dp, Color.White, CircleShape)
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    },
+                    onClick = onOpenThemeStudio
+                )
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), thickness = 0.5.dp)
+
+                // Gameplay & Quarter Length
+                SettingsMenuRow(
+                    icon = Icons.Rounded.Timer,
+                    title = "Gameplay & Quarter Length",
+                    subtitle = "${settings.quarterLengthMinutes} Minutes • ${if (settings.normalizeQuarterXp) "XP Normalized" else "Standard XP"}",
+                    onClick = onOpenGameplay
+                )
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), thickness = 0.5.dp)
+
+                // Data & Career Backups
+                SettingsMenuRow(
+                    icon = Icons.Rounded.Storage,
+                    title = "Data & Career Backups",
+                    subtitle = if (settings.autoSaveFolderUri.isNullOrBlank()) "Choose Folder" else "Backup Folder Configured",
+                    onClick = onOpenBackup
+                )
+            }
+        }
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), thickness = 0.5.dp)
+
+        // 3. Bottom Row: About PlayerLock
+        Card(
+            onClick = onOpenAbout,
+            modifier = Modifier.fillMaxWidth(),
+            shape = CardShape,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Info,
+                        contentDescription = null,
+                        tint = primaryColor,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Column {
+                        Text(
+                            text = "About PlayerLock",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "v${BuildConfig.VERSION_NAME} • Updates, Changelog & Info",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (availableUpdate != null) {
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = primaryColor.copy(alpha = 0.2f),
+                            border = BorderStroke(1.dp, primaryColor)
+                        ) {
+                            Text(
+                                text = "Update",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = primaryColor,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsMenuRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    trailingContent: (@Composable () -> Unit)? = null,
+    onClick: () -> Unit
+) {
+    val primaryColor = MaterialTheme.colorScheme.primary
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = primaryColor,
+                modifier = Modifier.size(20.dp)
+            )
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        if (trailingContent != null) {
+            trailingContent()
+        } else {
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun GameplaySettingsDialog(
+    settings: AppSettings,
+    viewModel: PlayerLockViewModel,
+    onDismiss: () -> Unit
+) {
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val quarterLength = settings.quarterLengthMinutes
+    val multiplier = if (settings.normalizeQuarterXp) (12.0 / quarterLength) * 0.85 else 1.0
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Text(
+                    text = "Gameplay & Quarter Length",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            IconButton(onClick = onDismiss) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = CardShape,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Quarter Length",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "$quarterLength Minutes • ${multiplier.format("0.00")}x XP",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = primaryColor
+                    )
+                }
+
+                Slider(
+                    value = quarterLength.toFloat(),
+                    onValueChange = { viewModel.updateQuarterLength(it.toInt()) },
+                    valueRange = 4f..12f,
+                    steps = 7,
+                    colors = SliderDefaults.colors(
+                        activeTrackColor = primaryColor,
+                        thumbColor = primaryColor
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), thickness = 0.5.dp)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Quarter XP Normalization",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Scale XP based on quarter length",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.normalizeQuarterXp,
+                        onCheckedChange = { viewModel.updateNormalizeQuarterXp(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                            checkedTrackColor = primaryColor
+                        )
+                    )
+                }
+            }
+        }
+
+        Text(
+            text = "Shorter quarters = faster XP pace. Normalization scales XP so 6-minute quarters feel like 12-minute quarters.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun DataBackupDialog(
+    settings: AppSettings,
+    playerName: String,
+    viewModel: PlayerLockViewModel,
+    onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var pendingExportJson by remember { mutableStateOf<String?>(null) }
-    var showThemeStudio by remember { mutableStateOf(false) }
-
     val primaryColor = MaterialTheme.colorScheme.primary
     val secondaryColor = MaterialTheme.colorScheme.secondary
+    var pendingExportJson by remember { mutableStateOf<String?>(null) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
@@ -150,12 +693,12 @@ fun SettingsCard(
                     inputStream.bufferedReader().use { it.readText() }
                 }
                 if (!jsonString.isNullOrBlank()) {
-                    onImportJson(
-                        jsonString,
-                        {
+                    viewModel.importCareerFromJson(
+                        jsonString = jsonString,
+                        onSuccess = {
                             Toast.makeText(context, "Career imported successfully!", Toast.LENGTH_LONG).show()
                         },
-                        { err ->
+                        onError = { err ->
                             Toast.makeText(context, "Import failed: $err", Toast.LENGTH_LONG).show()
                         }
                     )
@@ -175,8 +718,7 @@ fun SettingsCard(
             try {
                 val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 context.contentResolver.takePersistableUriPermission(uri, flags)
-                val uriString = uri.toString()
-                viewModel.updateAutoSaveFolderUri(uriString)
+                viewModel.updateAutoSaveFolderUri(uri.toString())
                 viewModel.updateAutoSaveEnabled(true)
                 viewModel.triggerAutoSave()
                 Toast.makeText(context, "Auto-save folder set!", Toast.LENGTH_SHORT).show()
@@ -192,7 +734,7 @@ fun SettingsCard(
         } else {
             try {
                 val treeUri = Uri.parse(settings.autoSaveFolderUri)
-                val docFile = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, treeUri)
+                val docFile = DocumentFile.fromTreeUri(context, treeUri)
                 docFile?.name ?: Uri.decode(treeUri.lastPathSegment ?: "Selected Folder")
             } catch (_: Exception) {
                 "Selected Folder"
@@ -200,262 +742,54 @@ fun SettingsCard(
         }
     }
 
-    val quarterLength = settings.quarterLengthMinutes
-    val multiplier = if (settings.normalizeQuarterXp) (12.0 / quarterLength) * 0.85 else 1.0
-
-    val activePreset = remember(settings.selectedThemeId, activeTeamName, settings.personalizePrimaryColor, settings.personalizeSecondaryColor) {
-        AppThemeCatalog.getPresetById(
-            id = settings.selectedThemeId,
-            activeTeamName = activeTeamName,
-            customPrimary = Color(settings.personalizePrimaryColor),
-            customSecondary = Color(settings.personalizeSecondaryColor)
-        )
-    }
-
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // ── 0. APPEARANCE & THEME CARD ───────────────────────────────────────
-        Card(
-            onClick = { showThemeStudio = true },
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            shape = CardShape,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "APPEARANCE & THEME",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        letterSpacing = 1.sp
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onSurface
                     )
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = primaryColor.copy(alpha = 0.15f),
-                        border = BorderStroke(1.dp, primaryColor)
-                    ) {
-                        Text(
-                            text = "Theme Studio",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = primaryColor,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                        )
-                    }
                 }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = activePreset.name,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        val modeText = when (settings.themeMode) {
-                            "LIGHT" -> "Light Mode"
-                            "SYSTEM" -> "System Default"
-                            else -> if (settings.pureBlackAmoled) "Dark Mode (Pure Black AMOLED)" else "Dark Mode"
-                        }
-                        Text(
-                            text = modeText,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy((-8).dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(activePreset.primaryDark)
-                                .border(2.dp, Color.White, CircleShape)
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(activePreset.secondaryDark)
-                                .border(2.dp, Color.White, CircleShape)
-                        )
-                    }
-                }
+                Text(
+                    text = "Data & Career Backups",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            IconButton(onClick = onDismiss) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
             }
         }
 
-        // ── 1. GAME SETTINGS CARD ─────────────────────────────────────────────
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = CardShape,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Text(
-                    text = "GAME SETTINGS",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    letterSpacing = 1.sp
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Quarter Length",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "$quarterLength Minutes • ${multiplier.format("0.00")}x XP",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = primaryColor
-                    )
-                }
-
-                Slider(
-                    value = quarterLength.toFloat(),
-                    onValueChange = { onQuarterLengthChanged(it.toInt()) },
-                    valueRange = 4f..12f,
-                    steps = 7,
-                    colors = SliderDefaults.colors(
-                        activeTrackColor = primaryColor,
-                        inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
-                        thumbColor = primaryColor
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), thickness = 0.5.dp)
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Quarter XP Normalization",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Scale XP based on quarter length",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = settings.normalizeQuarterXp,
-                        onCheckedChange = { onNormalizeChanged(it) },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                            checkedTrackColor = primaryColor,
-                            uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                    )
-                }
-            }
-        }
-
-        Text(
-            text = "Shorter quarters = faster XP pace. Normalization scales XP so 6-minute quarters feel like 12-minute quarters.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
-
-        // ── 2. CAREER BACKUP CARD ─────────────────────────────────────────────
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = CardShape,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Text(
-                    text = "CAREER BACKUP",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    letterSpacing = 1.sp
-                )
-                Text(
-                    text = "Export your active player save to JSON or restore a career save from a backup file.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                // Auto-Save Backup Switch Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Auto-Save Backup",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Automatically save career JSON on progress",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = settings.autoSaveEnabled,
-                        onCheckedChange = { enabled ->
-                            if (enabled && settings.autoSaveFolderUri.isNullOrBlank()) {
-                                folderPickerLauncher.launch(null)
-                            } else {
-                                viewModel.updateAutoSaveEnabled(enabled)
-                                if (enabled) {
-                                    viewModel.triggerAutoSave()
-                                }
-                            }
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                            checkedTrackColor = primaryColor,
-                            uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                    )
-                }
-
-                // Backup Folder Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -465,7 +799,7 @@ fun SettingsCard(
                         Text(
                             text = "Backup Folder",
                             style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
+                            fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
@@ -490,7 +824,6 @@ fun SettingsCard(
                     }
                 }
 
-                // Subtle status caption
                 val dateFormat = remember { SimpleDateFormat("MMM d, yyyy • h:mm a", Locale.getDefault()) }
                 val lastSavedText = remember(settings.lastAutoSaveTimestamp) {
                     if (settings.lastAutoSaveTimestamp > 0L) {
@@ -517,7 +850,7 @@ fun SettingsCard(
                             val sanitized = playerName.lowercase(Locale.ROOT).replace("\\s+".toRegex(), "_")
                             val fileName = "${sanitized}_save.json"
                             scope.launch {
-                                val json = onExportToJson()
+                                val json = viewModel.exportActiveCareerToJson()
                                 if (json != null) {
                                     pendingExportJson = json
                                     exportLauncher.launch(fileName)
@@ -561,13 +894,275 @@ fun SettingsCard(
             }
         }
     }
+}
 
-    if (showThemeStudio) {
-        ThemeStudioDialog(
-            settings = settings,
-            activeTeamName = activeTeamName,
-            viewModel = viewModel,
-            onDismiss = { showThemeStudio = false }
+@Composable
+private fun AboutSubScreen(
+    viewModel: PlayerLockViewModel,
+    onBack: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val availableUpdate by viewModel.availableUpdate.collectAsState()
+
+    var updateDialogData by remember { mutableStateOf<Triple<String, String, String?>?>(null) }
+    var showWhatsNewDialog by remember { mutableStateOf(false) }
+    var showDisclaimerDialog by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Top Row Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back to Settings",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Text(
+                    text = "About PlayerLock",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            IconButton(onClick = onDismiss) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+
+        // Emblem Header
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(vertical = 8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.SportsBasketball,
+                contentDescription = "PlayerLock Emblem",
+                tint = primaryColor,
+                modifier = Modifier.size(72.dp)
+            )
+            Text(
+                text = "PlayerLock",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = primaryColor
+            )
+            Text(
+                text = "MyNBA Career Stat Tracker & Progression Engine",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+        }
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), thickness = 0.5.dp)
+
+        // Menu Rows Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = CardShape,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                // Version Row
+                SettingsMenuRow(
+                    icon = Icons.Rounded.Info,
+                    title = "Version",
+                    subtitle = "Stable v${BuildConfig.VERSION_NAME}",
+                    trailingContent = {
+                        if (availableUpdate != null) {
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = primaryColor.copy(alpha = 0.15f),
+                                border = BorderStroke(1.dp, primaryColor)
+                            ) {
+                                Text(
+                                    text = "Update Available",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = primaryColor,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            }
+                        }
+                    },
+                    onClick = {}
+                )
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), thickness = 0.5.dp)
+
+                // Check for updates Row
+                SettingsMenuRow(
+                    icon = Icons.Rounded.SystemUpdate,
+                    title = "Check for updates",
+                    subtitle = "Query GitHub for latest release",
+                    onClick = {
+                        viewModel.checkForUpdatesManually { isNew, info, msg ->
+                            updateDialogData = Triple(
+                                if (isNew) "New Update Available (${info?.tagName})" else "Check for Updates",
+                                if (isNew) (info?.body ?: msg) else msg,
+                                info?.htmlUrl
+                            )
+                        }
+                    }
+                )
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), thickness = 0.5.dp)
+
+                // What's new Row
+                SettingsMenuRow(
+                    icon = Icons.Rounded.NewReleases,
+                    title = "What's new",
+                    subtitle = "Release notes & changelog",
+                    onClick = { showWhatsNewDialog = true }
+                )
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), thickness = 0.5.dp)
+
+                // Disclaimer Row
+                SettingsMenuRow(
+                    icon = Icons.Rounded.Gavel,
+                    title = "Disclaimer",
+                    subtitle = "Fan project & legal notices",
+                    onClick = { showDisclaimerDialog = true }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // GitHub Footer Button
+        OutlinedButton(
+            onClick = {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/VIOLENTNINJA0/PlayerLock"))
+                context.startActivity(intent)
+            },
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, primaryColor),
+            modifier = Modifier.padding(bottom = 8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Code,
+                contentDescription = "GitHub",
+                tint = primaryColor,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "View on GitHub",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = primaryColor
+            )
+        }
+    }
+
+    // Update Dialog
+    updateDialogData?.let { (title, body, downloadUrl) ->
+        AlertDialog(
+            onDismissRequest = { updateDialogData = null },
+            title = {
+                Text(text = title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            },
+            text = {
+                Text(text = body, style = MaterialTheme.typography.bodyMedium)
+            },
+            confirmButton = {
+                if (!downloadUrl.isNullOrBlank()) {
+                    Button(
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl))
+                            context.startActivity(intent)
+                            updateDialogData = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
+                    ) {
+                        Text("Download on GitHub", fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    TextButton(onClick = { updateDialogData = null }) {
+                        Text("OK", fontWeight = FontWeight.Bold, color = primaryColor)
+                    }
+                }
+            },
+            dismissButton = {
+                if (!downloadUrl.isNullOrBlank()) {
+                    TextButton(onClick = { updateDialogData = null }) {
+                        Text("Close", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
+
+    // What's New Dialog
+    if (showWhatsNewDialog) {
+        AlertDialog(
+            onDismissRequest = { showWhatsNewDialog = false },
+            title = {
+                Text(text = "What's New", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            },
+            text = {
+                Text(
+                    text = availableUpdate?.body ?: BUILT_IN_CHANGELOG,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showWhatsNewDialog = false }) {
+                    Text("Close", fontWeight = FontWeight.Bold, color = primaryColor)
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
+
+    // Disclaimer Dialog
+    if (showDisclaimerDialog) {
+        AlertDialog(
+            onDismissRequest = { showDisclaimerDialog = false },
+            title = {
+                Text(text = "Disclaimer", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            },
+            text = {
+                Text(
+                    text = DISCLAIMER_TEXT,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showDisclaimerDialog = false }) {
+                    Text("OK", fontWeight = FontWeight.Bold, color = primaryColor)
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(16.dp)
         )
     }
 }
