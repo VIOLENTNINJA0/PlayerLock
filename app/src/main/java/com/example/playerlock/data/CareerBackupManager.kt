@@ -71,6 +71,26 @@ class CareerBackupManager(
             put("seasonStartOvr", profile.seasonStartOvr)
             put("isInPlayoffs", profile.isInPlayoffs)
             profile.playoffBracketJson?.let { put("playoffBracketJson", it) }
+            put("themeMode", profile.themeMode)
+            put("selectedTeamTheme", profile.selectedTeamTheme)
+            put("amoledBlack", profile.amoledBlack)
+            put("customPrimaryHex", profile.customPrimaryHex)
+            put("customSecondaryHex", profile.customSecondaryHex)
+            put("customBackgroundHex", profile.customBackgroundHex)
+            put("customSurfaceHex", profile.customSurfaceHex)
+            put("customTextHex", profile.customTextHex)
+            put("weightAllowanceLbs", profile.weightAllowanceLbs)
+
+            if (!profile.avatarPath.isNullOrBlank()) {
+                try {
+                    val avatarFile = File(profile.avatarPath)
+                    if (avatarFile.exists()) {
+                        val bytes = avatarFile.readBytes()
+                        val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                        put("avatarImageBase64", base64)
+                    }
+                } catch (_: Exception) {}
+            }
         }
         rootJson.put("profile", profileJson)
 
@@ -210,6 +230,27 @@ class CareerBackupManager(
     suspend fun importCareerFromJson(jsonString: String): Result<Int> {
         return try {
             val newProfileId = repository.importCareerFromJson(jsonString)
+
+            try {
+                val rootJson = JSONObject(jsonString)
+                val profileJson = rootJson.optJSONObject("profile")
+                if (profileJson != null && profileJson.has("avatarImageBase64")) {
+                    val base64 = profileJson.optString("avatarImageBase64")
+                    if (base64.isNotBlank()) {
+                        val bytes = android.util.Base64.decode(base64, android.util.Base64.NO_WRAP)
+                        val avatarsDir = File(settingsDataStore.context.filesDir, "avatars")
+                        avatarsDir.mkdirs()
+                        val avatarFile = File(avatarsDir, "profile_${newProfileId}.png")
+                        avatarFile.writeBytes(bytes)
+
+                        val currentProfile = repository.getProfile(newProfileId)
+                        if (currentProfile != null) {
+                            repository.updateProfile(currentProfile.copy(avatarPath = avatarFile.absolutePath))
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+
             settingsDataStore.setActiveProfileId(newProfileId)
             Result.success(newProfileId)
         } catch (e: Exception) {

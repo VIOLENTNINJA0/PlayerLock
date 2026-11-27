@@ -309,7 +309,8 @@ class ProgressionRepository(private val database: AppDatabase) {
             availableAp = profile.availableAp + xpResult.apGained,
             availableBp = profile.availableBp + xpResult.bpGained,
             xpRemainderForAp = xpResult.xpRemainderForAp,
-            xpRemainderForBp = xpResult.xpRemainderForBp
+            xpRemainderForBp = xpResult.xpRemainderForBp,
+            weightAllowanceLbs = profile.weightAllowanceLbs + 2
         )
         database.playerProfileDao().updateProfile(updatedProfile)
 
@@ -500,6 +501,9 @@ class ProgressionRepository(private val database: AppDatabase) {
             availableBp = targetProfile.availableBp + undoResult.refundedBp
         )
         when (history.entityType) {
+            "WEIGHT" -> {
+                database.playerProfileDao().updateProfile(updatedProfile.copy(weightLbs = history.oldValue))
+            }
             "ATTRIBUTE" -> {
                 attribute?.let { attr ->
                     database.playerAttributeDao().updateAttribute(attr.copy(currentValue = history.oldValue))
@@ -582,6 +586,28 @@ class ProgressionRepository(private val database: AppDatabase) {
         database.playerProfileDao().updateProfile(updatedProfile)
         database.gameLogDao().deleteGameLog(log)
         return Result.success(Unit)
+    }
+
+    suspend fun recordWeightUpgrade(
+        profileId: Int,
+        seasonNumber: Int,
+        oldWeight: Int,
+        newWeight: Int,
+        costSpent: Int
+    ) {
+        val history = UpgradeHistory(
+            profileId = profileId,
+            seasonNumber = seasonNumber,
+            entityType = "WEIGHT",
+            entityId = 0,
+            oldValue = oldWeight,
+            newValue = newWeight,
+            costSpent = costSpent,
+            currencyType = "AP",
+            isAppliedIn2k = true,
+            timestamp = System.currentTimeMillis()
+        )
+        database.upgradeHistoryDao().insertUpgradeHistory(history)
     }
 
     suspend fun getAllUpgradeHistory(profileId: Int): List<UpgradeHistory> {
@@ -710,7 +736,16 @@ class ProgressionRepository(private val database: AppDatabase) {
             currentSeason = profileJson.optInt("currentSeason", 1),
             seasonStartOvr = profileJson.optInt("seasonStartOvr", profileJson.optInt("overallRating", 60)),
             isInPlayoffs = profileJson.optBoolean("isInPlayoffs", false),
-            playoffBracketJson = if (profileJson.has("playoffBracketJson") && !profileJson.isNull("playoffBracketJson")) profileJson.getString("playoffBracketJson") else null
+            playoffBracketJson = if (profileJson.has("playoffBracketJson") && !profileJson.isNull("playoffBracketJson")) profileJson.getString("playoffBracketJson") else null,
+            themeMode = profileJson.optString("themeMode", "DARK"),
+            selectedTeamTheme = if (profileJson.has("selectedTeamTheme") && !profileJson.isNull("selectedTeamTheme")) profileJson.getString("selectedTeamTheme") else null,
+            amoledBlack = profileJson.optBoolean("amoledBlack", false),
+            customPrimaryHex = profileJson.optLong("customPrimaryHex", 0xFFFFB300),
+            customSecondaryHex = profileJson.optLong("customSecondaryHex", 0xFF1E88E5),
+            customBackgroundHex = profileJson.optLong("customBackgroundHex", 0xFF121212),
+            customSurfaceHex = profileJson.optLong("customSurfaceHex", 0xFF1E1E1E),
+            customTextHex = profileJson.optLong("customTextHex", 0xFFFFFFFF),
+            weightAllowanceLbs = profileJson.optInt("weightAllowanceLbs", 0)
         )
 
         val newProfileId = database.playerProfileDao().insertProfile(importedProfile).toInt()

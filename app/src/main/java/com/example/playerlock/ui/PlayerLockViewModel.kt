@@ -132,15 +132,30 @@ class PlayerLockViewModel(
     private val _updateCheckStatus = MutableStateFlow<String?>(null)
     val updateCheckStatus: StateFlow<String?> = _updateCheckStatus.asStateFlow()
 
+    private var lastAppliedThemeProfileId: Int? = null
+
     init {
-        // Whenever the active profile changes, run catalog sync so that existing DB rows
-        // get their category and sortOrder updated to match AttributeSeedData (1..36)
-        // and BadgeSeedData (1..53) before the Flows emit to the UI.
+        // Whenever the active profile changes, run catalog sync and apply profile's saved theme ONLY when profile ID changes
         viewModelScope.launch {
-            activeProfileId.collect { profileId ->
-                if (profileId != null) {
-                    repository.syncExistingAttributes(profileId)
-                    repository.syncExistingBadges(profileId)
+            activeProfile.collect { profile ->
+                if (profile != null) {
+                    repository.syncExistingAttributes(profile.id)
+                    repository.syncExistingBadges(profile.id)
+
+                    if (profile.id != lastAppliedThemeProfileId) {
+                        lastAppliedThemeProfileId = profile.id
+                        settingsDataStore.saveThemeMode(profile.themeMode)
+                        if (profile.selectedTeamTheme != null) {
+                            settingsDataStore.saveSelectedThemeId(profile.selectedTeamTheme)
+                        }
+                        settingsDataStore.savePureBlackAmoled(profile.amoledBlack)
+                        settingsDataStore.savePersonalizeColors(
+                            primary = profile.customPrimaryHex,
+                            secondary = profile.customSecondaryHex
+                        )
+                    }
+                } else {
+                    lastAppliedThemeProfileId = null
                 }
             }
         }
@@ -490,18 +505,33 @@ class PlayerLockViewModel(
     fun updateSelectedThemeId(id: String) {
         viewModelScope.launch {
             settingsDataStore.saveSelectedThemeId(id)
+            val profile = activeProfile.value
+            if (profile != null) {
+                repository.updateProfile(profile.copy(selectedTeamTheme = id))
+                triggerAutoSaveInternal(profile.id)
+            }
         }
     }
 
     fun updateThemeMode(mode: String) {
         viewModelScope.launch {
             settingsDataStore.saveThemeMode(mode)
+            val profile = activeProfile.value
+            if (profile != null) {
+                repository.updateProfile(profile.copy(themeMode = mode))
+                triggerAutoSaveInternal(profile.id)
+            }
         }
     }
 
     fun updatePureBlackAmoled(enabled: Boolean) {
         viewModelScope.launch {
             settingsDataStore.savePureBlackAmoled(enabled)
+            val profile = activeProfile.value
+            if (profile != null) {
+                repository.updateProfile(profile.copy(amoledBlack = enabled))
+                triggerAutoSaveInternal(profile.id)
+            }
         }
     }
 
@@ -510,6 +540,53 @@ class PlayerLockViewModel(
             val primaryLong = primary.toArgb().toLong() and 0xFFFFFFFFL
             val secondaryLong = secondary.toArgb().toLong() and 0xFFFFFFFFL
             settingsDataStore.savePersonalizeColors(primaryLong, secondaryLong)
+            val profile = activeProfile.value
+            if (profile != null) {
+                repository.updateProfile(
+                    profile.copy(
+                        customPrimaryHex = primaryLong,
+                        customSecondaryHex = secondaryLong
+                    )
+                )
+                triggerAutoSaveInternal(profile.id)
+            }
+        }
+    }
+
+    fun updatePlayerVitals(
+        teamName: String,
+        jerseyNumber: Int,
+        weightLbs: Int,
+        avatarPath: String?,
+        apCost: Int,
+        lbsChanged: Int
+    ) {
+        viewModelScope.launch {
+            val current = activeProfile.value ?: return@launch
+            val newAp = (current.availableAp - apCost).coerceAtLeast(0)
+            val newAllowance = (current.weightAllowanceLbs - lbsChanged).coerceAtLeast(0)
+
+            val updated = current.copy(
+                teamName = teamName,
+                jerseyNumber = jerseyNumber,
+                weightLbs = weightLbs,
+                avatarPath = avatarPath,
+                availableAp = newAp,
+                weightAllowanceLbs = newAllowance
+            )
+            repository.updateProfile(updated)
+
+            if (lbsChanged > 0) {
+                repository.recordWeightUpgrade(
+                    profileId = current.id,
+                    seasonNumber = current.currentSeason,
+                    oldWeight = current.weightLbs,
+                    newWeight = weightLbs,
+                    costSpent = apCost
+                )
+            }
+
+            triggerAutoSaveInternal(current.id)
         }
     }
 

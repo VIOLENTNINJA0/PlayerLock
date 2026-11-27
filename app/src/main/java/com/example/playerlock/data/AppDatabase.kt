@@ -17,7 +17,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PlayerAward::class,
         SeasonSummary::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -213,6 +213,42 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Migration 11→12:
+         * - Adds per-profile theme fields and weightAllowanceLbs to player_profiles.
+         */
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                try {
+                    db.execSQL("ALTER TABLE player_profiles ADD COLUMN themeMode TEXT NOT NULL DEFAULT 'DARK'")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("ALTER TABLE player_profiles ADD COLUMN selectedTeamTheme TEXT")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("ALTER TABLE player_profiles ADD COLUMN amoledBlack INTEGER NOT NULL DEFAULT 0")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("ALTER TABLE player_profiles ADD COLUMN customPrimaryHex INTEGER NOT NULL DEFAULT -19712")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("ALTER TABLE player_profiles ADD COLUMN customSecondaryHex INTEGER NOT NULL DEFAULT -14775835")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("ALTER TABLE player_profiles ADD COLUMN customBackgroundHex INTEGER NOT NULL DEFAULT -15592942")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("ALTER TABLE player_profiles ADD COLUMN customSurfaceHex INTEGER NOT NULL DEFAULT -14803426")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("ALTER TABLE player_profiles ADD COLUMN customTextHex INTEGER NOT NULL DEFAULT -1")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("ALTER TABLE player_profiles ADD COLUMN weightAllowanceLbs INTEGER NOT NULL DEFAULT 0")
+                } catch (_: Exception) {}
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -224,7 +260,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4,
                         MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
                         MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
-                        MIGRATION_10_11
+                        MIGRATION_10_11, MIGRATION_11_12
                     )
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()

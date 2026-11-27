@@ -25,6 +25,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -322,7 +323,7 @@ private fun GameBoxScoreContent(
     var isWin by remember { mutableStateOf<Boolean?>(null) }
     var showResultError by remember { mutableStateOf(false) }
     var pointsValidationError by remember { mutableStateOf<String?>(null) }
-    var isPlayoff by remember { mutableStateOf(isInPlayoffs) }
+    val isPlayoff = isInPlayoffs
     var showScannerDialog by remember { mutableStateOf(false) }
     var scanSuccessBanner by remember { mutableStateOf<String?>(null) }
     var showGame82WarningDialog by remember { mutableStateOf(false) }
@@ -363,10 +364,7 @@ private fun GameBoxScoreContent(
         )
     }
 
-    // Lock game type to Playoff while in playoff mode
-    LaunchedEffect(isInPlayoffs) {
-        if (isInPlayoffs) isPlayoff = true
-    }
+
 
     // Auto-detection of Double-Double and Triple-Double
     val pts = points.toIntOrNull() ?: 0
@@ -647,20 +645,22 @@ private fun GameBoxScoreContent(
                         }
                     }
 
-                    // Playoff chip
+                    // Playoff chip (Read-only: ON in playoffs, OFF in regular season)
                     Surface(
-                        onClick = { if (!isInPlayoffs) isPlayoff = !isPlayoff },
                         shape = RoundedCornerShape(50),
-                        color = if (isPlayoff || isInPlayoffs) primaryColor else surfaceVarColor,
-                        border = if (isPlayoff || isInPlayoffs) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
-                        modifier = Modifier.weight(1.2f).height(40.dp)
+                        color = if (isInPlayoffs) primaryColor else surfaceVarColor.copy(alpha = 0.45f),
+                        border = if (isInPlayoffs) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
+                        modifier = Modifier
+                            .weight(1.2f)
+                            .height(40.dp)
+                            .alpha(if (isInPlayoffs) 1f else 0.45f)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
-                                text = if (isPlayoff || isInPlayoffs) "🏆 Playoff" else "Playoff",
-                                fontWeight = if (isPlayoff || isInPlayoffs) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 13.sp,
-                                color = if (isPlayoff || isInPlayoffs) onPrimaryColor else onSurfaceVarColor
+                                text = if (isInPlayoffs) "🏆 Playoff Game" else "Playoff Game",
+                                fontWeight = if (isInPlayoffs) FontWeight.Bold else FontWeight.Medium,
+                                fontSize = 12.sp,
+                                color = if (isInPlayoffs) onPrimaryColor else onSurfaceVarColor.copy(alpha = 0.6f)
                             )
                         }
                     }

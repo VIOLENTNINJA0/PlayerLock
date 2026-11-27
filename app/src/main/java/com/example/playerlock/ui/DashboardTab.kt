@@ -3,6 +3,8 @@ package com.example.playerlock.ui
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -19,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Settings
@@ -28,6 +31,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -35,6 +39,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -78,6 +83,7 @@ fun DashboardTab(
 ) {
     var showSettings by remember { mutableStateOf(false) }
     var showGoatHub by remember { mutableStateOf(false) }
+    var showEditVitals by remember { mutableStateOf(false) }
     val availableUpdate by viewModel?.availableUpdate?.collectAsState() ?: remember { mutableStateOf(null) }
     val context = LocalContext.current
     val primaryColor = MaterialTheme.colorScheme.primary
@@ -220,7 +226,7 @@ fun DashboardTab(
             return@Column
         }
 
-        val seasonGamesCount = gameLogs.count { it.seasonNumber == profile.currentSeason && !it.isPlayoff }
+        val seasonGamesCount = gameLogs.count { it.profileId == profile.id && it.seasonNumber == profile.currentSeason && !it.isPlayoff }
 
         // ── Playoff Series Banner ─────────────────────────────────────────────
         if (profile.isInPlayoffs) {
@@ -236,7 +242,7 @@ fun DashboardTab(
             }
         }
 
-        HeroCard(profile = profile, seasonGamesCount = seasonGamesCount, onClick = onOvrClick)
+        HeroCard(profile = profile, seasonGamesCount = seasonGamesCount, onClick = onOvrClick, onEditVitals = { showEditVitals = true })
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -297,10 +303,23 @@ fun DashboardTab(
             onDismiss = { showSettings = false }
         )
     }
+
+    if (showEditVitals && profile != null && viewModel != null) {
+        EditVitalsDialog(
+            profile = profile,
+            viewModel = viewModel,
+            onDismiss = { showEditVitals = false }
+        )
+    }
 }
 
 @Composable
-private fun HeroCard(profile: PlayerProfile, seasonGamesCount: Int, onClick: () -> Unit) {
+private fun HeroCard(
+    profile: PlayerProfile,
+    seasonGamesCount: Int,
+    onClick: () -> Unit,
+    onEditVitals: () -> Unit
+) {
     val avatarBitmap = rememberAvatarBitmap(profile.avatarPath)
     val primaryColor = MaterialTheme.colorScheme.primary
     val secondaryColor = MaterialTheme.colorScheme.secondary
@@ -348,31 +367,37 @@ private fun HeroCard(profile: PlayerProfile, seasonGamesCount: Int, onClick: () 
                 }
             }
             Spacer(Modifier.width(16.dp))
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
+                // Top Row: Player Name + Edit Vitals Button
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
                 ) {
                     Text(
                         text = profile.playerName,
-                        fontSize = 22.sp,
+                        fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(end = 4.dp)
                     )
-                    Surface(
-                        shape = RoundedCornerShape(50),
-                        color = primaryColor.copy(alpha = 0.15f),
-                        border = BorderStroke(1.dp, primaryColor)
+
+                    IconButton(
+                        onClick = onEditVitals,
+                        modifier = Modifier.size(36.dp)
                     ) {
-                        Text(
-                            text = if (profile.isInPlayoffs) "Season ${profile.currentSeason} • Playoffs" else "Season ${profile.currentSeason} • Game $seasonGamesCount/82",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = primaryColor,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        Icon(
+                            imageVector = Icons.Rounded.Edit,
+                            contentDescription = "Edit Vitals",
+                            tint = primaryColor,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
+
+                // Position & OVR
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -380,24 +405,46 @@ private fun HeroCard(profile: PlayerProfile, seasonGamesCount: Int, onClick: () 
                     Text(
                         text = profile.position,
                         style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
                         color = secondaryColor
                     )
                     if (avatarBitmap != null) {
                         Text(
-                            text = "${profile.overallRating} OVR",
+                            text = "•  ${profile.overallRating} OVR",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             color = primaryColor
                         )
                     }
                 }
+
+                // Vitals Line
                 Text(
                     text = "${profile.formattedHeight} • ${profile.weightLbs} lbs • #${profile.jerseyNumber} • ${profile.teamName}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = primaryColor.copy(alpha = 0.85f),
+                    color = primaryColor.copy(alpha = 0.9f),
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.padding(top = 2.dp)
                 )
+
+                // Season Progress Pill (Moved cleanly below vitals line)
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = primaryColor.copy(alpha = 0.15f),
+                    border = BorderStroke(1.dp, primaryColor),
+                    modifier = Modifier.padding(top = 6.dp)
+                ) {
+                    Text(
+                        text = if (profile.isInPlayoffs) "Season ${profile.currentSeason} • Playoffs" else "Season ${profile.currentSeason} • Game $seasonGamesCount/82",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = primaryColor,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                    )
+                }
+
                 Text(
                     text = "Tap to update OVR after editing in 2K",
                     style = MaterialTheme.typography.labelSmall,
@@ -1379,5 +1426,452 @@ private fun RecordBooksTabContent(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun EditVitalsDialog(
+    profile: PlayerProfile,
+    viewModel: PlayerLockViewModel,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val secondaryColor = MaterialTheme.colorScheme.secondary
+
+    var selectedTeam by remember { mutableStateOf(profile.teamName) }
+    var jerseyText by remember { mutableStateOf(profile.jerseyNumber.toString()) }
+    var targetWeight by remember { mutableIntStateOf(profile.weightLbs) }
+    val initialAvatarBitmap = rememberAvatarBitmap(profile.avatarPath)
+    var avatarPathState by remember { mutableStateOf(profile.avatarPath) }
+    var avatarBitmapState by remember(profile.avatarPath) { mutableStateOf(initialAvatarBitmap) }
+    var cropSourceBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
+    var showTeamDropdown by remember { mutableStateOf(false) }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val stream = context.contentResolver.openInputStream(uri)
+                val androidBitmap = BitmapFactory.decodeStream(stream)
+                if (androidBitmap != null) {
+                    cropSourceBitmap = androidBitmap.asImageBitmap()
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    val minWeight = (profile.weightLbs - profile.weightAllowanceLbs).coerceAtLeast(150)
+    val maxWeight = (profile.weightLbs + profile.weightAllowanceLbs).coerceAtMost(350)
+    val lbsChanged = kotlin.math.abs(targetWeight - profile.weightLbs)
+    val apCost = (lbsChanged + 1) / 2
+    val allowanceRemaining = profile.weightAllowanceLbs - lbsChanged
+    val isApInsufficient = apCost > profile.availableAp
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Header Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "EDIT VITALS & WEIGHT",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            text = "Mid-career adjustments & weight training",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+
+                // 1. Portrait Photo Section
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = CardShape,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "PLAYER PORTRAIT",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = primaryColor,
+                            letterSpacing = 1.sp,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .size(84.dp)
+                                .border(BorderStroke(3.dp, primaryColor), CircleShape)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surface),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (avatarBitmapState != null) {
+                                Image(
+                                    bitmap = avatarBitmapState!!,
+                                    contentDescription = "Player Avatar",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Rounded.Edit,
+                                    contentDescription = "No Photo",
+                                    tint = primaryColor,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                        }
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Button(
+                                onClick = { photoPickerLauncher.launch("image/*") },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
+                            ) {
+                                Text("Change Photo", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            if (avatarPathState != null) {
+                                OutlinedButton(
+                                    onClick = {
+                                        avatarPathState = null
+                                        avatarBitmapState = null
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                                ) {
+                                    Text("Remove Photo", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 2. Team & Jersey Section
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = CardShape,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Text(
+                            text = "TEAM & JERSEY",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            letterSpacing = 1.sp
+                        )
+
+                        // Team Dropdown Picker
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = { showTeamDropdown = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Team: $selectedTeam",
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text("▼", fontSize = 10.sp, color = primaryColor)
+                                }
+                            }
+
+                            DropdownMenu(
+                                expanded = showTeamDropdown,
+                                onDismissRequest = { showTeamDropdown = false },
+                                modifier = Modifier.heightIn(max = 280.dp)
+                            ) {
+                                com.example.playerlock.data.NbaTeamCatalog.TEAMS.forEach { team ->
+                                    DropdownMenuItem(
+                                        text = { Text(team.name, fontWeight = FontWeight.Medium) },
+                                        onClick = {
+                                            selectedTeam = team.name
+                                            showTeamDropdown = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Jersey Number
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Jersey Number (0–99)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            OutlinedTextField(
+                                value = jerseyText,
+                                onValueChange = { input ->
+                                    val filtered = input.filter { it.isDigit() }.take(2)
+                                    jerseyText = filtered
+                                },
+                                modifier = Modifier.width(80.dp),
+                                singleLine = true,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                        }
+
+                        // Height Row (Locked)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Lock,
+                                    contentDescription = "Locked",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "Height (Locked)",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Text(
+                                text = profile.formattedHeight,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                // 3. Weight Conditioning Section
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = CardShape,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Text(
+                            text = "WEIGHT CONDITIONING (AP & LOGGED GAMES)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = primaryColor,
+                            letterSpacing = 1.sp
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text(
+                                    text = "Training Allowance",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "${profile.weightAllowanceLbs} lbs available",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = primaryColor
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = "Available AP",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "${profile.availableAp} AP",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = secondaryColor
+                                )
+                            }
+                        }
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), thickness = 0.5.dp)
+
+                        // Stepper Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                OutlinedButton(
+                                    onClick = { targetWeight = (targetWeight - 2).coerceIn(minWeight, maxWeight) },
+                                    enabled = targetWeight > minWeight,
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("-2", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                                OutlinedButton(
+                                    onClick = { targetWeight = (targetWeight - 1).coerceIn(minWeight, maxWeight) },
+                                    enabled = targetWeight > minWeight,
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("-1", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            Text(
+                                text = "$targetWeight lbs",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = primaryColor
+                            )
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                OutlinedButton(
+                                    onClick = { targetWeight = (targetWeight + 1).coerceIn(minWeight, maxWeight) },
+                                    enabled = targetWeight < maxWeight,
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("+1", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                                OutlinedButton(
+                                    onClick = { targetWeight = (targetWeight + 2).coerceIn(minWeight, maxWeight) },
+                                    enabled = targetWeight < maxWeight,
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("+2", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        if (lbsChanged > 0) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Weight Change: $lbsChanged lbs",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "AP Cost: $apCost AP",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isApInsufficient) MaterialTheme.colorScheme.error else primaryColor
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Save Button
+                Button(
+                    onClick = {
+                        val jerseyNum = jerseyText.toIntOrNull()?.coerceIn(0, 99) ?: profile.jerseyNumber
+                        viewModel.updatePlayerVitals(
+                            teamName = selectedTeam,
+                            jerseyNumber = jerseyNum,
+                            weightLbs = targetWeight,
+                            avatarPath = avatarPathState,
+                            apCost = apCost,
+                            lbsChanged = lbsChanged
+                        )
+                        onDismiss()
+                    },
+                    enabled = !isApInsufficient,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
+                ) {
+                    val btnText = when {
+                        isApInsufficient -> "Insufficient AP ($apCost AP Needed)"
+                        lbsChanged > 0 -> "Save Changes ($apCost AP)"
+                        else -> "Save Changes"
+                    }
+                    Text(btnText, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                }
+            }
+        }
+    }
+
+    cropSourceBitmap?.let { sourceBitmap ->
+        AvatarCropDialog(
+            imageBitmap = sourceBitmap,
+            onDismiss = { cropSourceBitmap = null },
+            onSave = { panOffset, zoom, viewportPx ->
+                val savedPath = cropAndSaveCircularAvatar(
+                    context = context,
+                    sourceBitmap = sourceBitmap,
+                    panOffset = panOffset,
+                    zoom = zoom,
+                    viewportSizePx = viewportPx
+                )
+                if (savedPath != null) {
+                    avatarPathState = savedPath
+                    avatarBitmapState = BitmapFactory.decodeFile(savedPath)?.asImageBitmap()
+                }
+                cropSourceBitmap = null
+            }
+        )
     }
 }

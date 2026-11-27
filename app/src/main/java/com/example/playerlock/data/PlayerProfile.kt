@@ -22,7 +22,16 @@ data class PlayerProfile(
     val currentSeason: Int = 1,
     val seasonStartOvr: Int = 60,
     val isInPlayoffs: Boolean = false,
-    val playoffBracketJson: String? = null
+    val playoffBracketJson: String? = null,
+    val themeMode: String = "DARK",
+    val selectedTeamTheme: String? = null,
+    val amoledBlack: Boolean = false,
+    val customPrimaryHex: Long = 0xFFFFB300,
+    val customSecondaryHex: Long = 0xFF1E88E5,
+    val customBackgroundHex: Long = 0xFF121212,
+    val customSurfaceHex: Long = 0xFF1E1E1E,
+    val customTextHex: Long = 0xFFFFFFFF,
+    val weightAllowanceLbs: Int = 0
 ) {
     val formattedHeight: String
         get() = "${heightInches / 12}'${heightInches % 12}\""

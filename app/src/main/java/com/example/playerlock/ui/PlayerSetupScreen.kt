@@ -131,7 +131,7 @@ private fun loadBitmapFromUri(context: android.content.Context, uri: Uri): Image
     }
 }
 
-private fun cropAndSaveCircularAvatar(
+fun cropAndSaveCircularAvatar(
     context: android.content.Context,
     sourceBitmap: ImageBitmap,
     panOffset: Offset,
@@ -1346,7 +1346,7 @@ fun PlayerSetupScreen(
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun AvatarCropDialog(
+fun AvatarCropDialog(
     imageBitmap: ImageBitmap,
     onDismiss: () -> Unit,
     onSave: (panOffset: Offset, zoom: Float, viewportSizePx: Float) -> Unit
