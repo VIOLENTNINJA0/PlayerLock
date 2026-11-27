@@ -9,12 +9,20 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Stars
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,10 +37,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.playerlock.data.GameLog
+import com.example.playerlock.data.GoatStatusCalculator
+import com.example.playerlock.data.GoatStatusResult
 import com.example.playerlock.data.PlayerAward
 import com.example.playerlock.data.PlayerProfile
 import com.example.playerlock.data.PlayoffBracketState
+import com.example.playerlock.data.RecordBookCategory
 import java.util.Locale
 
 private const val AP_XP = 25.0   // 25 XP = 1 AP
@@ -64,6 +77,7 @@ fun DashboardTab(
     modifier: Modifier = Modifier
 ) {
     var showSettings by remember { mutableStateOf(false) }
+    var showGoatHub by remember { mutableStateOf(false) }
     val availableUpdate by viewModel?.availableUpdate?.collectAsState() ?: remember { mutableStateOf(null) }
     val context = LocalContext.current
     val primaryColor = MaterialTheme.colorScheme.primary
@@ -249,6 +263,28 @@ fun DashboardTab(
         SeasonAveragesCard(logs = gameLogs, currentSeason = profile.currentSeason)
 
         TrophyCaseCard(awards)
+
+        val goatResult = remember(gameLogs, awards) {
+            GoatStatusCalculator.calculateGoatStatus(gameLogs, awards)
+        }
+
+        GoatStatusCard(
+            result = goatResult,
+            onClick = { showGoatHub = true }
+        )
+    }
+
+    if (showGoatHub && profile != null) {
+        val goatResult = remember(gameLogs, awards) {
+            GoatStatusCalculator.calculateGoatStatus(gameLogs, awards)
+        }
+        GoatHubDialog(
+            playerName = profile.playerName,
+            gameLogs = gameLogs,
+            awards = awards,
+            goatResult = goatResult,
+            onDismiss = { showGoatHub = false }
+        )
     }
 
     if (showSettings && viewModel != null) {
@@ -666,6 +702,679 @@ private fun TrophyCaseCard(awards: List<PlayerAward>) {
                                 )
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GoatStatusCard(
+    result: GoatStatusResult,
+    onClick: () -> Unit
+) {
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val tier = result.currentTier
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = CardShape,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.EmojiEvents,
+                        contentDescription = "GOAT Status",
+                        tint = primaryColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "GOAT STATUS",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        letterSpacing = 1.sp
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = primaryColor.copy(alpha = 0.15f),
+                    border = BorderStroke(1.dp, primaryColor)
+                ) {
+                    Text(
+                        text = "${String.format(Locale.US, "%,d", result.goatPoints)} GOAT PTS",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = primaryColor,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Tier ${tier.tierNumber} • ${tier.tierName}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    val nextText = if (result.nextTier != null) {
+                        "Next: ${result.nextTier.tierName} (${String.format(Locale.US, "%,d", result.nextTier.minPoints)} pts)"
+                    } else {
+                        "#1 Undisputed GOAT Legend"
+                    }
+                    Text(
+                        text = nextText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (result.nextTier != null) {
+                LinearProgressIndicator(
+                    progress = { result.progressToNextTier },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp)),
+                    color = primaryColor,
+                    trackColor = primaryColor.copy(alpha = 0.2f)
+                )
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), thickness = 0.5.dp)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Tap to view GOAT Ladder & All-Time Record Books",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = primaryColor,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "➔",
+                    fontSize = 12.sp,
+                    color = primaryColor,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GoatHubDialog(
+    playerName: String,
+    gameLogs: List<GameLog>,
+    awards: List<PlayerAward>,
+    goatResult: GoatStatusResult,
+    onDismiss: () -> Unit
+) {
+    var selectedTab by remember { mutableIntStateOf(0) } // 0 = GOAT Ladder, 1 = Record Books
+    var selectedCategory by remember { mutableStateOf("Points") }
+
+    val primaryColor = MaterialTheme.colorScheme.primary
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Header Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "GOAT STATUS & RECORD BOOKS",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            text = "Track your rise among NBA All-Time Legends",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+
+                // Tab Switcher Row (GOAT Ladder | Record Books)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(42.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+                        .padding(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    listOf("GOAT Ladder", "Record Books").forEachIndexed { idx, label ->
+                        val selected = selectedTab == idx
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (selected) primaryColor else Color.Transparent)
+                                .clickable { selectedTab = idx },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 13.sp,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                // Tab Content
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    if (selectedTab == 0) {
+                        // TAB 1: GOAT Ladder
+                        GoatLadderTabContent(goatResult = goatResult)
+                    } else {
+                        // TAB 2: Record Books
+                        RecordBooksTabContent(
+                            playerName = playerName,
+                            gameLogs = gameLogs,
+                            selectedCategory = selectedCategory,
+                            onCategorySelected = { selectedCategory = it }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GoatLadderTabContent(goatResult: GoatStatusResult) {
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val currentTier = goatResult.currentTier
+    val breakdown = goatResult.breakdown
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // Summary Header Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = CardShape,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "CURRENT GOAT TIER",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = primaryColor,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            text = "Tier ${currentTier.tierNumber} • ${currentTier.tierName}",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = primaryColor
+                    ) {
+                        Text(
+                            text = "${String.format(Locale.US, "%,d", goatResult.goatPoints)} PTS",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.Black,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                        )
+                    }
+                }
+
+                if (goatResult.nextTier != null) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Next: ${goatResult.nextTier.tierName}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "${String.format(Locale.US, "%,d", goatResult.nextTier.minPoints)} PTS",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = primaryColor,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        LinearProgressIndicator(
+                            progress = { goatResult.progressToNextTier },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            color = primaryColor,
+                            trackColor = primaryColor.copy(alpha = 0.2f)
+                        )
+                    }
+                }
+            }
+        }
+
+        // GOAT Points Breakdown Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = CardShape,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "GOAT POINTS BREAKDOWN",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    letterSpacing = 1.sp
+                )
+
+                val breakdownRows = listOf(
+                    "Championships (+1,500/title)" to breakdown.championshipPts,
+                    "Finals MVPs (+1,000/FMVP)" to breakdown.finalsMvpPts,
+                    "League MVPs (+1,200/MVP)" to breakdown.mvpPts,
+                    "DPOY Awards (+600/DPOY)" to breakdown.dpoyPts,
+                    "All-NBA Teams" to breakdown.allNbaPts,
+                    "ROTY & All-Star Selections" to (breakdown.royPts + breakdown.allStarPts),
+                    "Career Stats Milestones" to breakdown.careerStatsPts,
+                    "Triple-Doubles & 50+ PT Games" to (breakdown.tripleDoublePts + breakdown.fiftyPointPts)
+                )
+
+                breakdownRows.forEach { (label, valPts) ->
+                    if (valPts > 0) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "+${String.format(Locale.US, "%,d", valPts)} pts",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = primaryColor
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 10-Tier Legend Ladder List
+        Text(
+            text = "10-TIER GOAT LEGEND LADDER",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            letterSpacing = 1.sp,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            GoatStatusCalculator.TIERS.sortedBy { it.tierNumber }.forEach { tier ->
+                val isCurrent = tier.tierNumber == currentTier.tierNumber
+                val isPassed = currentTier.tierNumber < tier.tierNumber
+
+                val containerBg = when {
+                    isCurrent -> primaryColor.copy(alpha = 0.12f)
+                    isPassed -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    else -> MaterialTheme.colorScheme.surface
+                }
+                val borderColor = when {
+                    isCurrent -> primaryColor
+                    isPassed -> primaryColor.copy(alpha = 0.4f)
+                    else -> MaterialTheme.colorScheme.outlineVariant
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = containerBg,
+                    border = BorderStroke(if (isCurrent) 2.dp else 1.dp, borderColor),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            if (isCurrent) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Stars,
+                                    contentDescription = "Current Tier",
+                                    tint = primaryColor,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            } else if (isPassed) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Completed Tier",
+                                    tint = primaryColor,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Rounded.Lock,
+                                    contentDescription = "Locked Tier",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(
+                                        text = "Tier ${tier.tierNumber} • ${tier.tierName}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isCurrent) primaryColor else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (isCurrent) {
+                                        Surface(
+                                            shape = RoundedCornerShape(50),
+                                            color = primaryColor
+                                        ) {
+                                            Text(
+                                                text = "YOU ARE HERE",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Black,
+                                                color = Color.Black,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Text(
+                            text = "${String.format(Locale.US, "%,d", tier.minPoints)} PTS",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isCurrent) primaryColor else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecordBooksTabContent(
+    playerName: String,
+    gameLogs: List<GameLog>,
+    selectedCategory: String,
+    onCategorySelected: (String) -> Unit
+) {
+    val primaryColor = MaterialTheme.colorScheme.primary
+
+    val categories = listOf("Points", "Rebounds", "Assists", "Steals", "Blocks")
+
+    val userStatValue = remember(selectedCategory, gameLogs) {
+        when (selectedCategory) {
+            "Points" -> gameLogs.sumOf { it.points }.toLong()
+            "Rebounds" -> gameLogs.sumOf { it.rebounds }.toLong()
+            "Assists" -> gameLogs.sumOf { it.assists }.toLong()
+            "Steals" -> gameLogs.sumOf { it.steals }.toLong()
+            "Blocks" -> gameLogs.sumOf { it.blocks }.toLong()
+            else -> gameLogs.sumOf { it.points }.toLong()
+        }
+    }
+
+    val recordCategory = remember(selectedCategory, userStatValue, playerName) {
+        GoatStatusCalculator.calculateRecordBookCategory(selectedCategory, playerName, userStatValue)
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // Category Chips
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(categories) { cat ->
+                val isSel = selectedCategory == cat
+                Surface(
+                    onClick = { onCategorySelected(cat) },
+                    shape = RoundedCornerShape(50),
+                    color = if (isSel) primaryColor else MaterialTheme.colorScheme.surfaceVariant,
+                    border = BorderStroke(1.dp, if (isSel) primaryColor else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                ) {
+                    Text(
+                        text = cat,
+                        fontSize = 12.sp,
+                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                    )
+                }
+            }
+        }
+
+        // Category Rank Banner Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = CardShape,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "ALL-TIME $selectedCategory RANK",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = primaryColor,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            text = "${String.format(Locale.US, "%,d", userStatValue)} Total $selectedCategory",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = primaryColor
+                    ) {
+                        Text(
+                            text = "#${recordCategory.userRank} ALL-TIME",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.Black,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
+                val distanceText = if (recordCategory.userRank == 1) {
+                    "🏆 #1 All-Time NBA Leader!"
+                } else {
+                    "${String.format(Locale.US, "%,d", recordCategory.statsToNextLegend)} $selectedCategory to pass ${recordCategory.nextLegendName} (#${recordCategory.userRank - 1})"
+                }
+
+                Text(
+                    text = distanceText,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = primaryColor
+                )
+            }
+        }
+
+        // Leaderboard Table
+        Text(
+            text = "NBA ALL-TIME TOP 10 RANKINGS",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            letterSpacing = 1.sp,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = CardShape,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(0.dp)
+            ) {
+                recordCategory.rankings.forEachIndexed { idx, record ->
+                    val isUser = record.isUser
+                    val rowBg = if (isUser) primaryColor.copy(alpha = 0.15f) else Color.Transparent
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(rowBg)
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "#${record.rank}",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isUser) primaryColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.width(32.dp)
+                            )
+
+                            Text(
+                                text = record.playerName,
+                                fontSize = 14.sp,
+                                fontWeight = if (isUser) FontWeight.ExtraBold else FontWeight.Bold,
+                                color = if (isUser) primaryColor else MaterialTheme.colorScheme.onSurface
+                            )
+
+                            if (isUser) {
+                                Surface(
+                                    shape = RoundedCornerShape(50),
+                                    color = primaryColor
+                                ) {
+                                    Text(
+                                        text = "YOU",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = Color.Black,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Text(
+                            text = String.format(Locale.US, "%,d", record.statValue),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isUser) primaryColor else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    if (idx < recordCategory.rankings.size - 1) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f), thickness = 0.5.dp)
                     }
                 }
             }

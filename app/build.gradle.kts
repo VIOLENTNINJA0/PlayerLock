@@ -1,3 +1,11 @@
+import java.util.Properties
+
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.inputStream().use { localProperties.load(it) }
+}
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -29,10 +37,33 @@ android {
         }
     }
 
+    signingConfigs {
+        val storeFilePath = localProperties.getProperty("RELEASE_STORE_FILE")
+        val storePassword = localProperties.getProperty("RELEASE_STORE_PASSWORD")
+        val keyAlias = localProperties.getProperty("RELEASE_KEY_ALIAS")
+        val keyPassword = localProperties.getProperty("RELEASE_KEY_PASSWORD")
+
+        if (!storeFilePath.isNullOrBlank() && file(storeFilePath).exists()) {
+            create("release") {
+                storeFile = file(storeFilePath)
+                this.storePassword = storePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
+            }
+        }
+    }
+
     buildTypes {
-        release {
+        val releaseSigning = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+
+        getByName("release") {
             isMinifyEnabled = false
             isShrinkResources = false
+            signingConfig = releaseSigning
+        }
+
+        getByName("debug") {
+            signingConfig = releaseSigning
         }
     }
     compileOptions {
@@ -42,6 +73,17 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.outputs.forEach { output ->
+            val abiFilter = output.filters.find { it.filterType == com.android.build.api.variant.FilterConfiguration.FilterType.ABI }?.identifier ?: "universal"
+            val suffix = if (variant.buildType == "debug") "-debug" else ""
+            output.outputFileName.set("PlayerLock-v${android.defaultConfig.versionName}-$abiFilter$suffix.apk")
+        }
     }
 }
 
